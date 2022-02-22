@@ -56,6 +56,9 @@ public:
     /* ------ KSP example ex_12 ------ */
     PetscErrorCode testKSP_RegistNewPC();
 
+    /* ------ KSP example ex_13 ------ */
+    PetscErrorCode testKSP_PoissonPro();
+
 
 public:
     Vec            x, b, u;      /* approx solution, RHS, exact solution */

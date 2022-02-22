@@ -1839,8 +1839,8 @@ PetscErrorCode testPETScKSP::testKSP_RegistNewPC()
 
     /* Create parallel vectors.
           - When using VecCreate(), VecSetSizes() and VecSetFromOptions(),
-        we specify only the vector's global
-            dimension; the parallel partitioning is determined at runtime.
+            we specify only the vector's global dimension;
+            the parallel partitioning is determined at runtime.
           - When solving a linear system, the vectors and matrices MUST
             be partitioned accordingly.  PETSc automatically generates
             appropriately partitioned matrices and vectors when MatCreate()
@@ -1904,6 +1904,9 @@ PetscErrorCode testPETScKSP::testKSP_RegistNewPC()
 
     return ierr;
 }
+
+
+
 
 PetscErrorCode testPETScKSP::CheckError(Vec xx, Vec uu, KSP kspp)
 {
