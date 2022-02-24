@@ -20,6 +20,7 @@ public:
     ~applicationExamples();
 
 public:
+    /* ------ KSP example ex_13 ------ */
     PetscErrorCode SolPoissonProblemKSP();
 
 

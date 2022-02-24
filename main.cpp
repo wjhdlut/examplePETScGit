@@ -2,6 +2,7 @@
 #include"testPETScVec.h"
 #include"testPETScMat.h"
 #include"testPETScKSP.h"
+#include"applicationExamples.h"
 
 static char help[] = "Solves a linear system in parallel with KSP.\n";
 
@@ -44,7 +45,11 @@ PetscErrorCode main(int argc,char **args)
     //tpKSP.testKSP_PCASM();
     //tpKSP.testKSP_SolDiffLinSys();
     //tpKSP.testKSP_Preloading();
-    tpKSP.testKSP_RegistNewPC();
+    //tpKSP.testKSP_RegistNewPC();
+    tpKSP.testKSP_SolDiffRHSKSP();
+
+    //applicationExamples aE;
+    //aE.SolPoissonProblemKSP();
 
     ierr = PetscFinalize();
     return ierr;

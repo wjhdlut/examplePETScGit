@@ -1905,10 +1905,134 @@ PetscErrorCode testPETScKSP::testKSP_RegistNewPC()
     return ierr;
 }
 
+/* ------------------ KSP example ex_16 ------------------ */
+PetscErrorCode testPETScKSP::testKSP_SolDiffRHSKSP()
+{
+    PetscBool      flg = PETSC_FALSE;
+
+    m   = 8; n = 7;
+    ierr = PetscOptionsGetInt(NULL, NULL, "-m", &m, NULL); CHKERRQ(ierr);
+    ierr = PetscOptionsGetInt(NULL, NULL, "-n", &n, NULL); CHKERRQ(ierr);
+
+    ierr = PetscPrintf(PETSC_COMM_WORLD, "m = %d, n = %d\n", m, n); CHKERRQ(ierr);
+    /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+           Compute the matrix for use in solving a series of
+           linear systems of the form, A x_i = b_i, for i=1,2,...
+       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+    /* Create parallel matrix, specifying only its global dimensions.
+       When using MatCreate(), the matrix format can be specified at
+       runtime. Also, the parallel partitioning of the matrix is
+       determined by PETSc at runtime. */
+    ierr = MatCreate(PETSC_COMM_WORLD, &A); CHKERRQ(ierr);
+    ierr = MatSetSizes(A, PETSC_DECIDE, PETSC_DECIDE, m*n, m*n); CHKERRQ(ierr);
+    ierr = MatSetFromOptions(A); CHKERRQ(ierr);
+    ierr = MatSetUp(A); CHKERRQ(ierr);
+
+    /* Currently, all PETSc parallel matrix formats are partitioned by
+       contiguous chunks of rows across the processors.  Determine which
+       rows of the matrix are locally owned. */
+    ierr = MatGetOwnershipRange(A, &Istart, &Iend); CHKERRQ(ierr);
+    RANK_COUT << "Istart = " << Istart << ", Iend = " << Iend << std::endl;
+
+    /* Set matrix elements for the 2-D, five-point stencil in parallel.
+        - Each processor needs to insert only elements that it owns
+          locally (but any non-local elements will be sent to the
+          appropriate processor during matrix assembly).
+        - Always specify global rows and columns of matrix entries. */
+    PetscScalar v1 = -1.0, v2 = 4.0;
+    ierr = FormMatrixA(v1, v2, INSERT_VALUES); CHKERRQ(ierr);
+
+    /* Assemble matrix, using the 2-step process:
+         MatAssemblyBegin(), MatAssemblyEnd()
+       Computations can be done while messages are in transition
+       by placing code between these two statements. */
+    ierr = MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    ierr = MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+
+    /* Create parallel vectors.
+        - When using VecCreate(), VecSetSizes() and VecSetFromOptions(),
+          we specify only the vector's global
+          dimension; the parallel partitioning is determined at runtime.
+        - When solving a linear system, the vectors and matrices MUST
+          be partitioned accordingly.  PETSc automatically generates
+          appropriately partitioned matrices and vectors when MatCreate()
+          and VecCreate() are used with the same communicator.
+        - Note: We form 1 vector from scratch and then duplicate as needed. */
+    ierr = VecCreate(PETSC_COMM_WORLD, &u); CHKERRQ(ierr);
+    ierr = VecSetSizes(u,PETSC_DECIDE, m*n); CHKERRQ(ierr);
+    ierr = VecSetFromOptions(u); CHKERRQ(ierr);
+    ierr = VecDuplicate(u, &b); CHKERRQ(ierr);
+    ierr = VecDuplicate(b, &x); CHKERRQ(ierr);
+
+    /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                  Create the linear solver and set various options
+       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+    /* Create linear solver context */
+    ierr = KSPCreate(PETSC_COMM_WORLD, &ksp);CHKERRQ(ierr);
+
+    /* Set operators. Here the matrix that defines the linear system
+       also serves as the preconditioning matrix. */
+    ierr = KSPSetOperators(ksp, A, A); CHKERRQ(ierr);
+
+    /* Set runtime options, e.g.,
+          -ksp_type <type> -pc_type <type> -ksp_monitor -ksp_rtol <rtol>
+      These options will override those specified above as long as
+      KSPSetFromOptions() is called _after_ any other customization
+      routines. */
+    ierr = KSPSetFromOptions(ksp); CHKERRQ(ierr);
+
+    /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+         Solve several linear systems of the form  A x_i = b_i
+         I.e., we retain the same matrix (A) for all systems, but
+         change the right-hand-side vector (b_i) at each step.
+
+         In this case, we simply call KSPSolve() multiple times.  The
+         preconditioner setup operations (e.g., factorization for ILU)
+         be done during the first call to KSPSolve() only; such operations
+         will NOT be repeated for successive solves.
+       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+    PetscInt ntimes = 2;
+    ierr   = PetscOptionsGetInt(NULL,NULL, "-ntimes", &ntimes, NULL); CHKERRQ(ierr);
+
+    PetscScalar    one = 1.0, rhs;
+    for (PetscInt k=1; k<ntimes+1; k++) {
+
+      /* Set exact solution; then compute right-hand-side vector.  We use
+         an exact solution of a vector with all elements equal to 1.0*k. */
+      rhs  = one * (PetscReal)k;
+      ierr = VecSet(u, rhs); CHKERRQ(ierr);
+      ierr = MatMult(A, u, b); CHKERRQ(ierr);
+
+      /* View the exact solution vector if desired */
+      ierr = PetscOptionsGetBool(NULL, NULL, "-view_exact_sol", &flg, NULL); CHKERRQ(ierr);
+      if (flg) {
+          ierr = VecView(u, PETSC_VIEWER_STDOUT_WORLD); CHKERRQ(ierr);
+      }
+
+      ierr = KSPSolve(ksp, b, x); CHKERRQ(ierr);
+
+      /* Check the error */
+      ierr = CheckError(x, u, ksp); CHKERRQ(ierr);
+    }
+
+    /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                        Clean up
+       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+    /* Free work space.  All PETSc objects should be destroyed when they
+       are no longer needed. */
+    ierr = KSPDestroy(&ksp); CHKERRQ(ierr);
+    ierr = VecDestroy(&u); CHKERRQ(ierr);
+    ierr = VecDestroy(&x); CHKERRQ(ierr);
+    ierr = VecDestroy(&b); CHKERRQ(ierr);
+    ierr = MatDestroy(&A); CHKERRQ(ierr);
+
+    return ierr;
+}
 
 
-
-PetscErrorCode testPETScKSP::CheckError(Vec xx, Vec uu, KSP kspp)
+PetscErrorCode testPETScKSP::CheckError(const Vec xx, const Vec uu, const KSP kspp)
 {
     /*
       Input Parameter

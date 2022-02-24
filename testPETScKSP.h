@@ -59,6 +59,9 @@ public:
     /* ------ KSP example ex_13 ------ */
     PetscErrorCode testKSP_PoissonPro();
 
+    /* ------ KSP example ex_16 ------ */
+    PetscErrorCode testKSP_SolDiffRHSKSP();
+
 
 public:
     Vec            x, b, u;      /* approx solution, RHS, exact solution */
@@ -77,7 +80,7 @@ private:
     PetscErrorCode FormMatrixA(PetscScalar v1 = -1.0, PetscScalar v2 = 4.0, InsertMode mode = ADD_VALUES);
     PetscErrorCode FormMatrixA(Mat &C, PetscScalar v1, PetscScalar v2, InsertMode mode);
     PetscErrorCode FormBlockMatrixA(PetscScalar v1, PetscScalar v2, InsertMode mode);
-    PetscErrorCode CheckError(Vec x, Vec u, KSP ksp);
+    PetscErrorCode CheckError(const Vec x, const Vec u, const KSP ksp);
 };
 
 #endif // TESTPETSCKSP_H

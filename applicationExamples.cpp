@@ -16,6 +16,7 @@ applicationExamples::~applicationExamples()
 
 }
 
+/* ------------------ KSP example ex_13 ------------------ */
 PetscErrorCode applicationExamples::SolPoissonProblemKSP()
 {
     PetscReal      enorm;
@@ -55,9 +56,9 @@ PetscErrorCode applicationExamples::SolPoissonProblemKSP()
         PetscScalar x = hx;
         for (PetscInt i=0; i<m_m; i++) {
             rho[Ii]      = x;
-            solution[Ii] = (2. * PETSC_PI * x) * (2. * PETSC_PI * y);
-            userb[Ii]    = -2. * PETSC_PI * (2. * PETSC_PI * x) * (2. * PETSC_PI * y)
-                          + 8. * pow(PETSC_PI, 2.) * x * (2. * PETSC_PI * x) * (2. * PETSC_PI * y);
+            solution[Ii] = PetscSinScalar(2. * PETSC_PI * x) * PetscSinScalar(2. * PETSC_PI * y);
+            userb[Ii]    = -2. * PETSC_PI * PetscCosScalar(2. *PETSC_PI * x) * PetscSinScalar(+2. * PETSC_PI * y)
+                    + 8. * PETSC_PI * PETSC_PI * x * PetscSinScalar(2. * PETSC_PI * x) * PetscSinScalar(2. * PETSC_PI * y);
             x += hx;
             Ii++;
         }
@@ -110,7 +111,7 @@ PetscErrorCode applicationExamples::SolPoissonProblemKSP()
            also serves as the preconditioning matrix. Since all the matrices
            will have the same nonzero pattern here, we indicate this so the
            linear solvers can take advantage of this. */
-        ierr = KSPSetOperators(m_userCtx.ksp, m_userCtx.A, m_userCtx.A);CHKERRQ(ierr);
+        ierr = KSPSetOperators(m_userCtx.ksp, m_userCtx.A, m_userCtx.A); CHKERRQ(ierr);
 
         /* Set linear solver defaults for this problem (optional).
            - Here we set it to use direct LU factorization for the solution */
@@ -138,7 +139,6 @@ PetscErrorCode applicationExamples::SolPoissonProblemKSP()
         /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
                             Solve the linear system
            - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-
         ierr = KSPSolve(m_userCtx.ksp, m_userCtx.b, m_userCtx.x); CHKERRQ(ierr);
 
         /* Put back the PETSc array that belongs in the vector xuserctx->x */
@@ -195,5 +195,7 @@ PetscErrorCode applicationExamples::FinalizeLinearSolver(UserCtx *userCtx)
     ierr = VecDestroy(&userCtx->b); CHKERRQ(ierr);
     ierr = VecDestroy(&userCtx->x); CHKERRQ(ierr);
     ierr = KSPDestroy(&userCtx->ksp); CHKERRQ(ierr);
+
+    return ierr;
 }
 
