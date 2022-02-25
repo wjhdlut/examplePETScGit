@@ -2031,6 +2031,174 @@ PetscErrorCode testPETScKSP::testKSP_SolDiffRHSKSP()
     return ierr;
 }
 
+/* ------------------ KSP example ex_18 ------------------ */
+PetscErrorCode testPETScKSP::testKSP_SolPErmutedLinearSysKSP()
+{
+    char      ordering[100] = MATORDERINGRCM;
+    IS        rowperm       = NULL;
+    IS        colperm       = NULL;
+    PetscBool random_exact_sol, view_exact_sol, permute;
+    ierr = PetscOptionsBegin(PETSC_COMM_WORLD, NULL, "Poisson example options", ""); CHKERRQ(ierr);
+    {
+        m                = 8;
+        ierr             = PetscOptionsInt("-m", "Number of grid points in x direction", "", m, &m, NULL); CHKERRQ(ierr);
+        n                = m-1;
+        ierr             = PetscOptionsInt("-n", "Number of grid points in y direction", "", n, &n, NULL); CHKERRQ(ierr);
+        random_exact_sol = PETSC_FALSE;
+        ierr             = PetscOptionsBool("-random_exact_sol", "Choose a random exact solution", "",
+                                            random_exact_sol, &random_exact_sol, NULL); CHKERRQ(ierr);
+        view_exact_sol   = PETSC_FALSE;
+        ierr             = PetscOptionsBool("-view_exact_sol", "View exact solution", "",
+                                            view_exact_sol, &view_exact_sol, NULL); CHKERRQ(ierr);
+        permute          = PETSC_FALSE;
+        ierr             = PetscOptionsBool("-permute", "Permute matrix and vector to solving in new ordering", "",
+                                            permute, &permute, NULL); CHKERRQ(ierr);
+//        ierr             = PetscOptionsFList("-permute", "Permute matrix and vector to solving in new ordering",
+//                                             "", MatOrderingList, ordering, ordering, sizeof(ordering), &permute); CHKERRQ(ierr);
+    }
+    ierr = PetscOptionsEnd(); CHKERRQ(ierr);
+    /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+           Compute the matrix and right-hand-side vector that define
+           the linear system, Ax = b.
+       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+    ierr = MatCreate(PETSC_COMM_WORLD, &A); CHKERRQ(ierr);
+    ierr = MatSetSizes(A, PETSC_DECIDE, PETSC_DECIDE, m*n, m*n); CHKERRQ(ierr);
+    ierr = MatSetFromOptions(A); CHKERRQ(ierr);
+    ierr = MatMPIAIJSetPreallocation(A, 5, NULL, 5, NULL); CHKERRQ(ierr);
+    ierr = MatSeqAIJSetPreallocation(A, 5, NULL); CHKERRQ(ierr);
+    ierr = MatSetUp(A); CHKERRQ(ierr);
+
+    /* Currently, all PETSc parallel matrix formats are partitioned by
+       contiguous chunks of rows across the processors.  Determine which
+       rows of the matrix are locally owned. */
+    ierr = MatGetOwnershipRange(A, &Istart, &Iend);CHKERRQ(ierr);
+    RANK_COUT << "Istart = " << Istart << ", Iend = " << Iend << std::endl;
+
+    /* Set matrix elements for the 2-D, five-point stencil in parallel.
+        - Each processor needs to insert only elements that it owns
+          locally (but any non-local elements will be sent to the
+          appropriate processor during matrix assembly).
+        - Always specify global rows and columns of matrix entries.
+       Note: this uses the less common natural ordering that orders first
+       all the unknowns for x = h then for x = 2h etc; Hence you see J = Ii +- n
+       instead of J = I +- m as you might expect. The more standard ordering
+       would first do all variables for y = h, then y = 2h etc. */
+
+    PetscScalar v1 = -1.0, v2 = 4.0;
+    ierr = FormMatrixA(v1, v2, INSERT_VALUES); CHKERRQ(ierr);
+    ierr = MatAssemblyBegin(A,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+    ierr = MatAssemblyEnd(A,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+
+    /* A is symmetric. Set symmetric flag to enable ICC/Cholesky preconditioner */
+    ierr = MatSetOption(A, MAT_SYMMETRIC, PETSC_TRUE); CHKERRQ(ierr);
+
+    /* Create parallel vectors.
+        - We form 1 vector from scratch and then duplicate as needed.
+        - When using VecCreate(), VecSetSizes and VecSetFromOptions()
+          in this example, we specify only the vector's global dimension;
+          the parallel partitioning is determined at runtime.
+        - When solving a linear system, the vectors and matrices MUST
+          be partitioned accordingly.  PETSc automatically generates
+          appropriately partitioned matrices and vectors when MatCreate()
+          and VecCreate() are used with the same communicator.
+        - The user can alternatively specify the local vector and matrix
+          dimensions when more sophisticated partitioning is needed
+          (replacing the PETSC_DECIDE argument in the VecSetSizes() statement
+          below). */
+    ierr = VecCreate(PETSC_COMM_WORLD, &u); CHKERRQ(ierr);
+    ierr = VecSetSizes(u, PETSC_DECIDE, m*n); CHKERRQ(ierr);
+    ierr = VecSetFromOptions(u); CHKERRQ(ierr);
+    ierr = VecDuplicate(u, &b); CHKERRQ(ierr);
+    ierr = VecDuplicate(b, &x); CHKERRQ(ierr);
+
+    /* Set exact solution; then compute right-hand-side vector.
+       By default we use an exact solution of a vector with all
+       elements of 1.0;  Alternatively, using the runtime option
+       -random_sol forms a solution vector with random components. */
+    if (random_exact_sol) {
+        PetscRandom    rctx;     /* random number generator context */
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "random_exact_sol is activated!\n"); CHKERRQ(ierr);
+        ierr = PetscRandomCreate(PETSC_COMM_WORLD, &rctx); CHKERRQ(ierr);
+        ierr = PetscRandomSetFromOptions(rctx); CHKERRQ(ierr);
+        ierr = VecSetRandom(u, rctx); CHKERRQ(ierr);
+        ierr = PetscRandomDestroy(&rctx); CHKERRQ(ierr);
+    }
+    else {
+        ierr = VecSet(u, 1.0); CHKERRQ(ierr);
+    }
+    ierr = MatMult(A, u, b); CHKERRQ(ierr);
+
+    /* View the exact solution vector if desired */
+    if (view_exact_sol){
+        ierr = VecView(u, PETSC_VIEWER_STDOUT_WORLD); CHKERRQ(ierr);
+    }
+
+    if (permute) {
+        Mat  Aperm;
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "permute is activated!\n"); CHKERRQ(ierr);
+        ierr = MatGetOrdering(A, ordering, &rowperm, &colperm); CHKERRQ(ierr);
+        ierr = MatPermute(A, rowperm, colperm, &Aperm); CHKERRQ(ierr);
+        ierr = VecPermute(b, colperm, PETSC_FALSE); CHKERRQ(ierr);
+        ierr = MatDestroy(&A); CHKERRQ(ierr);
+        /* Replace original operator with permuted version */
+        A    = Aperm;
+    }
+
+    /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                  Create the linear solver and set various options
+       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+    /* Create linear solver context */
+    ierr = KSPCreate(PETSC_COMM_WORLD, &ksp); CHKERRQ(ierr);
+
+    /* Set operators. Here the matrix that defines the linear system
+       also serves as the preconditioning matrix. */
+    ierr = KSPSetOperators(ksp, A, A); CHKERRQ(ierr);
+
+    /* Set linear solver defaults for this problem (optional).
+       - By extracting the KSP and PC contexts from the KSP context,
+         we can then directly call any KSP and PC routines to set
+         various options.
+       - The following two statements are optional; all of these
+         parameters could alternatively be specified at runtime via
+         KSPSetFromOptions().  All of these defaults can be
+         overridden at runtime, as indicated below. */
+    ierr = KSPSetTolerances(ksp, 1.e-2/((m+1)*(n+1)), PETSC_DEFAULT,
+                            PETSC_DEFAULT, PETSC_DEFAULT); CHKERRQ(ierr);
+
+    /* Set runtime options, e.g.,
+          -ksp_type <type> -pc_type <type> -ksp_monitor -ksp_rtol <rtol>
+      These options will override those specified above as long as
+      KSPSetFromOptions() is called _after_ any other customization
+      routines. */
+    ierr = KSPSetFromOptions(ksp); CHKERRQ(ierr);
+
+    /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                        Solve the linear system
+       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+    ierr = KSPSolve(ksp, b, x); CHKERRQ(ierr);
+
+    /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                        Check solution and clean up
+       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+    if (permute){
+        ierr = VecPermute(x, rowperm, PETSC_TRUE); CHKERRQ(ierr);
+    }
+
+    /* Check the error */
+    ierr = CheckError(x, u, ksp); CHKERRQ(ierr);
+
+    /* Free work space.  All PETSc objects should be destroyed when they
+       are no longer needed. */
+    ierr = KSPDestroy(&ksp); CHKERRQ(ierr);
+    ierr = VecDestroy(&u); CHKERRQ(ierr);
+    ierr = VecDestroy(&x); CHKERRQ(ierr);
+    ierr = VecDestroy(&b); CHKERRQ(ierr);
+    ierr = MatDestroy(&A); CHKERRQ(ierr);
+    ierr = ISDestroy(&rowperm); CHKERRQ(ierr);
+    ierr = ISDestroy(&colperm); CHKERRQ(ierr);
+
+    return ierr;
+}
 
 PetscErrorCode testPETScKSP::CheckError(const Vec xx, const Vec uu, const KSP kspp)
 {
@@ -2054,7 +2222,7 @@ PetscErrorCode testPETScKSP::FormMatrixA(PetscScalar v1, PetscScalar v2, InsertM
     PetscScalar v;
     PetscInt    i, j;
     PetscInt    J;
-    for (PetscInt Ii=Istart; Ii<Iend; Ii++) {
+    for (auto Ii=Istart; Ii<Iend; Ii++) {
         v = v1;
         i = Ii/n;
         j = Ii - i*n;

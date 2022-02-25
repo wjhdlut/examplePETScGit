@@ -46,7 +46,8 @@ PetscErrorCode main(int argc,char **args)
     //tpKSP.testKSP_SolDiffLinSys();
     //tpKSP.testKSP_Preloading();
     //tpKSP.testKSP_RegistNewPC();
-    tpKSP.testKSP_SolDiffRHSKSP();
+    //tpKSP.testKSP_SolDiffRHSKSP();
+    tpKSP.testKSP_SolPErmutedLinearSysKSP();
 
     //applicationExamples aE;
     //aE.SolPoissonProblemKSP();
