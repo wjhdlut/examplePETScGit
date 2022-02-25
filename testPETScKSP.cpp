@@ -313,7 +313,7 @@ PetscErrorCode testPETScKSP::testKSP_Laplacian()
     /* Assemble matrix */
     ierr = FormElementStiffness(h*h, Ke); CHKERRQ(ierr);
 
-    for (i=Istart; i<Iend; i++) {
+    for (auto i=Istart; i<Iend; i++) {
         /* node numbers for the four corners of element */
         idx[0] = (m+1)*(i/m) + (i % m);
         idx[1] = idx[0]+1;
@@ -338,7 +338,7 @@ PetscErrorCode testPETScKSP::testKSP_Laplacian()
     ierr = VecSet(b, 0.0); CHKERRQ(ierr);
 
     /* Assemble right-hand-side vector */
-    for (i=Istart; i<Iend; i++) {
+    for (auto i=Istart; i<Iend; i++) {
         /* location of lower left corner of element */
         xx = h*(i % m);
         yy = h*(i/m);
@@ -355,7 +355,7 @@ PetscErrorCode testPETScKSP::testKSP_Laplacian()
 
     /* Modify matrix and right-hand-side for Dirichlet boundary conditions */
     PetscInt *rows = new PetscInt[4*m]();
-    for (i=0; i<m+1; i++) {
+    for (auto i=0; i<m+1; i++) {
         rows[i] = i; /* bottom */
         rows[3*m - 1 +i] = m*(m+1) + i; /* top */
     }
