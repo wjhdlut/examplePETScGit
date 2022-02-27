@@ -1,14 +1,18 @@
+#include<petscdmda.h>
+#include<petscdm.h>
+#include<petscksp.h>
 #include"applicationExamples.h"
 
 applicationExamples::applicationExamples()
 {
-
+    m_aEP  = this;
 }
 
 applicationExamples::applicationExamples(int rank, int size)
 {
     m_rank = rank;
     m_size = size;
+    m_aEP  = this;
 }
 
 applicationExamples::~applicationExamples()
@@ -199,3 +203,119 @@ PetscErrorCode applicationExamples::FinalizeLinearSolver(UserCtx *userCtx)
     return ierr;
 }
 
+/* ------------------ KSP example ex_25 ------------------ */
+/* Solves 1D variable coefficient Laplacian using multigrid. */
+PetscErrorCode applicationExamples::SolPartialDiffEqu()
+{
+    PetscErrorCode ierr;
+    KSP            ksp;
+    DM             da;
+    AppCtx         user;
+    Mat            A;
+    Vec            b, b2;
+    Vec            x;
+    PetscReal      nrm;
+
+    user.k = 1;
+    ierr   = PetscOptionsGetInt(NULL, 0, "-k", &user.k, 0); CHKERRQ(ierr);
+    user.e = .99;
+    ierr   = PetscOptionsGetScalar(NULL, 0, "-e", &user.e, 0); CHKERRQ(ierr);
+
+    ierr = KSPCreate(PETSC_COMM_WORLD, &ksp); CHKERRQ(ierr);
+    ierr = DMDACreate1d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, 128, 1, 1, 0, &da); CHKERRQ(ierr);
+    ierr = DMSetFromOptions(da); CHKERRQ(ierr);
+    ierr = DMSetUp(da); CHKERRQ(ierr);
+    ierr = KSPSetDM(ksp,da); CHKERRQ(ierr);
+
+    ierr = KSPSetComputeRHS(ksp, CompRHS, &user); CHKERRQ(ierr);
+    ierr = KSPSetComputeOperators(ksp, CompStiffMatrix, &user); CHKERRQ(ierr);
+
+    ierr = KSPSetFromOptions(ksp); CHKERRQ(ierr);
+    ierr = KSPSolve(ksp, NULL, NULL); CHKERRQ(ierr);
+
+    ierr = KSPGetOperators(ksp, &A, NULL); CHKERRQ(ierr);
+    ierr = KSPGetSolution(ksp, &x); CHKERRQ(ierr);
+    ierr = KSPGetRhs(ksp, &b); CHKERRQ(ierr);
+    ierr = VecDuplicate(b, &b2); CHKERRQ(ierr);
+    ierr = MatMult(A, x, b2); CHKERRQ(ierr);
+    ierr = VecAXPY(b2, -1.0, b); CHKERRQ(ierr);
+    ierr = VecNorm(b2, NORM_MAX, &nrm); CHKERRQ(ierr);
+    ierr = PetscPrintf(PETSC_COMM_WORLD, "Residual norm %g\n", (double)nrm); CHKERRQ(ierr);
+
+    ierr = VecDestroy(&b2); CHKERRQ(ierr);
+    ierr = KSPDestroy(&ksp); CHKERRQ(ierr);
+    ierr = DMDestroy(&da); CHKERRQ(ierr);
+
+    return ierr;
+}
+
+applicationExamples* applicationExamples::m_aEP = NULL;
+
+PetscErrorCode applicationExamples::CompRHS(KSP ksp, Vec b, void *ctx)
+{
+    PetscInt       mx;
+    PetscScalar    h;
+    DM             da;
+    PetscErrorCode ierr;
+    PetscInt       *idx = new PetscInt[2];
+    PetscScalar    *v   = new PetscScalar[2];
+
+    PetscFunctionBeginUser;
+    ierr   = KSPGetDM(ksp, &da); CHKERRQ(ierr);
+    ierr   = DMDAGetInfo(da, 0, &mx, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0); CHKERRQ(ierr);
+    std::cout << "RANK[" << m_aEP->m_rank << "], " << "mx = " << mx << std::endl;
+
+    h      = 1.0/((mx-1));
+    ierr   = VecSet(b, h); CHKERRQ(ierr);
+    idx[0] = 0;
+    idx[1] = mx -1;
+    v[0]   = 0.0;
+    v[1] = 0.0;
+    ierr   = VecSetValues(b, 2, idx, v, INSERT_VALUES); CHKERRQ(ierr);
+    ierr   = VecAssemblyBegin(b); CHKERRQ(ierr);
+    ierr   = VecAssemblyEnd(b); CHKERRQ(ierr);
+    PetscFunctionReturn(0);
+
+    delete[] idx;
+    delete[] v;
+}
+
+PetscErrorCode applicationExamples::CompStiffMatrix(KSP ksp, Mat J, Mat jac, void *ctx)
+{
+    AppCtx         *user = (AppCtx*)ctx;
+    PetscInt       mx,xm,xs;
+    PetscScalar    v[3],h,xlow,xhigh;
+    MatStencil     row,col[3];
+    DM             da;
+    PetscErrorCode ierr;
+
+    PetscFunctionBeginUser;
+    ierr = KSPGetDM(ksp, &da); CHKERRQ(ierr);
+    ierr = DMDAGetInfo(da, 0, &mx, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0); CHKERRQ(ierr);
+    ierr = DMDAGetCorners(da, &xs, 0, 0, &xm, 0, 0); CHKERRQ(ierr);
+    std::cout << "RANK[" << m_aEP->m_rank << "], " << "xs = " << xs << ", xm = " << xm << std::endl;
+
+    h    = 1.0/(mx-1);
+
+    for (auto i=xs; i<xs+xm; i++) {
+        row.i = i;
+        if (i==0 || i==mx-1) {
+            v[0] = 2.0/h;
+            ierr = MatSetValuesStencil(jac,1,&row,1,&row,v,INSERT_VALUES);CHKERRQ(ierr);
+        } else {
+            xlow  = h*(PetscReal)i - .5*h;
+            xhigh = xlow + h;
+            v[0]  = (-1.0 - user->e*PetscSinScalar(2.0*PETSC_PI*user->k*xlow))/h;
+            col[0].i = i-1;
+            v[1]  = (2.0 + user->e*PetscSinScalar(2.0*PETSC_PI*user->k*xlow) + user->e*PetscSinScalar(2.0*PETSC_PI*user->k*xhigh))/h;
+            col[1].i = row.i;
+            v[2]  = (-1.0 - user->e*PetscSinScalar(2.0*PETSC_PI*user->k*xhigh))/h;
+            col[2].i = i+1;
+            ierr  = MatSetValuesStencil(jac, 1, &row, 3, col, v, INSERT_VALUES); CHKERRQ(ierr);
+        }
+    }
+    ierr = MatAssemblyBegin(jac, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    ierr = MatAssemblyEnd(jac, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    PetscFunctionReturn(0);
+    return ierr;
+}

@@ -34,7 +34,7 @@ PetscErrorCode main(int argc,char **args)
     //tpM.testMat_ResetPreallocation();
     //tpM.testMat_PetscInfo();
 
-    testPETScKSP tpKSP(rank, size);
+    //testPETScKSP tpKSP(rank, size);
     //tpKSP.testKSP_SolTridiagonalLinearSysSeq();
     //tpKSP.testKSP_SolTridiagonalLinearSysPar();
     //tpKSP.testKSP_Laplacian();
@@ -47,10 +47,11 @@ PetscErrorCode main(int argc,char **args)
     //tpKSP.testKSP_Preloading();
     //tpKSP.testKSP_RegistNewPC();
     //tpKSP.testKSP_SolDiffRHSKSP();
-    tpKSP.testKSP_SolPErmutedLinearSysKSP();
+    //tpKSP.testKSP_SolPErmutedLinearSysKSP();
 
-    //applicationExamples aE;
+    applicationExamples aE(rank, size);
     //aE.SolPoissonProblemKSP();
+    aE.SolPartialDiffEqu();
 
     ierr = PetscFinalize();
     return ierr;

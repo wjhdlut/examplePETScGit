@@ -11,6 +11,12 @@ struct UserCtx
     PetscScalar hx2, hy2;     /* 1/(m+1)*(m+1) and 1/(n+1)*(n+1) */
     PC          pc;
 };
+struct AppCtx
+{
+    PetscInt    k;
+    PetscScalar e;
+};
+
 
 class applicationExamples : public testPETSc
 {
@@ -23,6 +29,9 @@ public:
     /* ------ KSP example ex_13 ------ */
     PetscErrorCode SolPoissonProblemKSP();
 
+    /* ------ KSP example ex_25 ------ */
+    PetscErrorCode SolPartialDiffEqu();
+
 
 public:
     PetscInt    m_m, m_n;       /* grid dimensions*/
@@ -32,6 +41,12 @@ public:
 private:
     PetscErrorCode InitializeLinearSolver(UserCtx *userCtx);
     PetscErrorCode FinalizeLinearSolver(UserCtx *userCtx);
+
+    static PetscErrorCode CompStiffMatrix(KSP ksp, Mat J, Mat jac, void *ctx);
+    static PetscErrorCode CompRHS(KSP ksp, Vec b, void *ctx);
+
+public:
+    static applicationExamples *m_aEP;
 };
 
 #endif // APPLICATIONEXAMPLES_H
