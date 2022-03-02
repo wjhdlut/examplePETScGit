@@ -51,7 +51,8 @@ PetscErrorCode main(int argc,char **args)
 
     applicationExamples aE(rank, size);
     //aE.SolPoissonProblemKSP();
-    aE.SolPartialDiffEqu();
+    //aE.SolPartialDiffEqu();
+    aE.SolPartialDiffEqu(0);
 
     ierr = PetscFinalize();
     return ierr;

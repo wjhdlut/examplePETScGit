@@ -31,6 +31,7 @@ public:
 
     /* ------ KSP example ex_25 ------ */
     PetscErrorCode SolPartialDiffEqu();
+    PetscErrorCode SolPartialDiffEqu(int temp);
 
 
 public:
