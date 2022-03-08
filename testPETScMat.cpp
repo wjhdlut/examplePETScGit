@@ -30,10 +30,10 @@ PetscErrorCode testPETScMat::testMat_SeqDense()
     ierr = PetscMalloc1(size*size, &b); CHKERRQ(ierr);
 
     for (i=0; i<size; i++) {
-      for (j=0; j<size; j++) {
-        ierr = PetscRandomGetValue(rnd, &a[i+j*size]); CHKERRQ(ierr);
-        b[i+j*size] = a[i+j*size];
-      }
+        for (j=0; j<size; j++) {
+            ierr = PetscRandomGetValue(rnd, &a[i+j*size]); CHKERRQ(ierr);
+            b[i+j*size] = a[i+j*size];
+        }
     }
     ierr = MatCreate(PETSC_COMM_SELF, &A); CHKERRQ(ierr);
     ierr = MatSetSizes(A, size, size, size, size);CHKERRQ(ierr);
@@ -45,7 +45,7 @@ PetscErrorCode testPETScMat::testMat_SeqDense()
 
     ierr = PetscMalloc1(size, &x); CHKERRQ(ierr);
     for (i=0; i<size; i++) {
-      x[i] = one;
+        x[i] = one;
     }
     ierr = VecCreateSeqWithArray(PETSC_COMM_SELF, 1, size, x, &X); CHKERRQ(ierr);
     //ierr = VecAssemblyBegin(X); CHKERRQ(ierr);
@@ -112,8 +112,8 @@ PetscErrorCode testPETScMat::testMat_SeqDense()
     ierr = VecNorm(Z, NORM_2, &nrm); CHKERRQ(ierr);
     std::cout << "nrm = " << nrm << std::endl;
     if (nrm > 100.0*PETSC_MACHINE_EPSILON) {
-      ierr = PetscPrintf(PETSC_COMM_WORLD, "---- Test1; error norm=%g ---\n",
-                         (double)nrm); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "---- Test1; error norm=%g ---\n",
+                           (double)nrm); CHKERRQ(ierr);
     }
 
     /* Next test: change both matrices */
@@ -143,8 +143,8 @@ PetscErrorCode testPETScMat::testMat_SeqDense()
     ierr = VecAXPY(Z, -1.0, Y);CHKERRQ(ierr);
     ierr = VecNorm(Z, NORM_2, &nrm); CHKERRQ(ierr);
     if (nrm > 100.0*PETSC_MACHINE_EPSILON) {
-      ierr = PetscPrintf(PETSC_COMM_WORLD, "Test2; error norm=%g\n",
-                         (double)nrm);CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "Test2; error norm=%g\n",
+                           (double)nrm);CHKERRQ(ierr);
     }
 
     /* Transpose product */
@@ -156,8 +156,8 @@ PetscErrorCode testPETScMat::testMat_SeqDense()
     ierr = VecAXPY(Z, -1.0, Y); CHKERRQ(ierr);
     ierr = VecNorm(Z, NORM_2, &nrm); CHKERRQ(ierr);
     if (nrm > 100.0*PETSC_MACHINE_EPSILON) {
-      ierr = PetscPrintf(PETSC_COMM_WORLD, "Test3; error norm=%g\n",
-                         (double)nrm); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "Test3; error norm=%g\n",
+                           (double)nrm); CHKERRQ(ierr);
     }
     ierr = PetscFree(a); CHKERRQ(ierr);
     ierr = PetscFree(b); CHKERRQ(ierr);
@@ -241,13 +241,13 @@ PetscErrorCode testPETScMat::testMat_1DLapla()
 
     /* Check that an interior unit vector gets mapped to something of 1-norm 4 */
     if (m_size > 1) {
-      ierr = VecSet(x, 0.0); CHKERRQ(ierr);
-      ierr = VecSetValue(x, 1, 1.0, INSERT_VALUES); CHKERRQ(ierr);
-      ierr = VecAssemblyBegin(x); CHKERRQ(ierr);
-      ierr = VecAssemblyEnd(x); CHKERRQ(ierr);
-      ierr = MatMult(A, x, y); CHKERRQ(ierr);
-      ierr = VecNorm(y, NORM_1, &error); CHKERRQ(ierr);
-      ierr = VecView(y, PETSC_VIEWER_STDOUT_WORLD); CHKERRQ(ierr);
+        ierr = VecSet(x, 0.0); CHKERRQ(ierr);
+        ierr = VecSetValue(x, 1, 1.0, INSERT_VALUES); CHKERRQ(ierr);
+        ierr = VecAssemblyBegin(x); CHKERRQ(ierr);
+        ierr = VecAssemblyEnd(x); CHKERRQ(ierr);
+        ierr = MatMult(A, x, y); CHKERRQ(ierr);
+        ierr = VecNorm(y, NORM_1, &error); CHKERRQ(ierr);
+        ierr = VecView(y, PETSC_VIEWER_STDOUT_WORLD); CHKERRQ(ierr);
     }
 
     /* Cleanup */

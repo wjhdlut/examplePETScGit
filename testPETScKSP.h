@@ -65,7 +65,9 @@ public:
     /* ------ KSP example ex_18 ------ */
     PetscErrorCode testKSP_SolPErmutedLinearSysKSP();
 
-    /* ------ KSP example ex_23 ------ */
+    /* ------ KSP example ex_46 ------ */
+    PetscErrorCode testKSP_SolLinearSysDM();
+
 
 public:
     Vec            x, b, u;      /* approx solution, RHS, exact solution */

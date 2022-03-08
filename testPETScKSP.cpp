@@ -313,7 +313,7 @@ PetscErrorCode testPETScKSP::testKSP_Laplacian()
     /* Assemble matrix */
     ierr = FormElementStiffness(h*h, Ke); CHKERRQ(ierr);
 
-    for (auto i=Istart; i<Iend; i++) {
+    for (i=Istart; i<Iend; i++) {
         /* node numbers for the four corners of element */
         idx[0] = (m+1)*(i/m) + (i % m);
         idx[1] = idx[0]+1;
@@ -338,7 +338,7 @@ PetscErrorCode testPETScKSP::testKSP_Laplacian()
     ierr = VecSet(b, 0.0); CHKERRQ(ierr);
 
     /* Assemble right-hand-side vector */
-    for (auto i=Istart; i<Iend; i++) {
+    for (i=Istart; i<Iend; i++) {
         /* location of lower left corner of element */
         xx = h*(i % m);
         yy = h*(i/m);
@@ -355,7 +355,7 @@ PetscErrorCode testPETScKSP::testKSP_Laplacian()
 
     /* Modify matrix and right-hand-side for Dirichlet boundary conditions */
     PetscInt *rows = new PetscInt[4*m]();
-    for (auto i=0; i<m+1; i++) {
+    for (i=0; i<m+1; i++) {
         rows[i] = i; /* bottom */
         rows[3*m - 1 +i] = m*(m+1) + i; /* top */
     }
@@ -2344,5 +2344,170 @@ PetscErrorCode testPETScKSP::FormBlockMatrixA(PetscScalar v1, PetscScalar v2, In
             ierr = MatSetValues(A, 1, &II, 1, &II, &v, mode); CHKERRQ(ierr);
         }
     }
+    return ierr;
+}
+
+/* ------------------ KSP example ex_46 ------------------ */
+PetscErrorCode testPETScKSP::testKSP_SolLinearSysDM()
+{
+    DM             da;            /* distributed array */
+
+    /* Create distributed array to handle parallel distribution.
+       The problem size will default to 8 by 7, but this can be
+       changed using -da_grid_x M -da_grid_y N */
+    ierr = DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DMDA_STENCIL_STAR,
+                        8, 7, PETSC_DECIDE, PETSC_DECIDE, 1, 1, NULL, NULL, &da); CHKERRQ(ierr);
+    ierr = DMSetFromOptions(da); CHKERRQ(ierr);
+    ierr = DMSetUp(da); CHKERRQ(ierr);
+
+    /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+           Compute the matrix and right-hand-side vector that define
+           the linear system, Ax = b.
+       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+    /* Create parallel matrix preallocated according to the DMDA, format AIJ by default.
+       To use symmetric storage, run with -dm_mat_type sbaij -mat_ignore_lower_triangular */
+    ierr = DMCreateMatrix(da, &A); CHKERRQ(ierr);
+
+    PetscInt gloRowNum, gloLineNum;
+    ierr = MatGetSize(A, &gloRowNum, &gloLineNum); CHKERRQ(ierr);
+    RANK_COUT << "gloRowNum = " << gloRowNum << ", gloLineNum = " << gloLineNum << std::endl;
+
+    PetscInt locRowNum, locLineNum;
+    ierr = MatGetLocalSize(A, &locRowNum, &locLineNum); CHKERRQ(ierr);
+    RANK_COUT << "locRowNum = " << locRowNum << ", locLineNum = " << locLineNum << std::endl;
+
+    /* Set matrix elements for the 2-D, five-point stencil in parallel.
+        - Each processor needs to insert only elements that it owns
+          locally (but any non-local elements will be sent to the
+          appropriate processor during matrix assembly).
+        - Rows and columns are specified by the stencil
+        - Entries are normalized for a domain [0,1]x[0,1] */
+    DMDALocalInfo  info;
+    ierr = DMDAGetLocalInfo(da, &info); CHKERRQ(ierr);
+
+    RANK_COUT << "info.xs = " << info.xs << ", info.xs + info.xm = " << info.xs + info.xm << std::endl;
+    RANK_COUT << "info.ys = " << info.ys << ", info.ys + info.ym = " << info.ys + info.ym << std::endl;
+
+    for (auto j=info.ys; j<info.ys+info.ym; j++)
+    {
+        for (auto i=info.xs; i<info.xs+info.xm; i++)
+        {
+            PetscReal   hx  = 1./info.mx;
+            PetscReal   hy  = 1./info.my;
+            MatStencil  row = {0};
+            MatStencil  col[5] = {{0}};
+            PetscScalar v[5];
+            PetscInt    ncols = 0;
+
+            row.j = j;
+            row.i = i;
+            col[ncols].j = j;
+            col[ncols].i = i;
+            v[ncols++] = 2*(hx/hy + hy/hx);
+
+            /* boundaries */
+            if (i>0){
+                col[ncols].j = j;
+                col[ncols].i = i-1;
+                v[ncols++] = -hy/hx;
+            }
+
+            if (i<info.mx-1){
+                col[ncols].j = j;
+                col[ncols].i = i+1;
+                v[ncols++] = -hy/hx;
+            }
+
+            if (j>0){
+                col[ncols].j = j-1;
+                col[ncols].i = i;
+                v[ncols++] = -hx/hy;
+            }
+
+            if (j<info.my-1){
+                col[ncols].j = j+1;
+                col[ncols].i = i;
+                v[ncols++] = -hx/hy;
+            }
+
+            ierr = MatSetValuesStencil(A, 1, &row, ncols, col, v, INSERT_VALUES); CHKERRQ(ierr);
+        }
+    }
+
+    /* Assemble matrix, using the 2-step process:
+         MatAssemblyBegin(), MatAssemblyEnd()
+       Computations can be done while messages are in transition
+       by placing code between these two statements. */
+    ierr = MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    ierr = MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+
+    /* Create parallel vectors compatible with the DMDA. */
+    ierr = DMCreateGlobalVector(da, &u); CHKERRQ(ierr);
+    ierr = VecDuplicate(u, &b); CHKERRQ(ierr);
+    ierr = VecDuplicate(u, &x); CHKERRQ(ierr);
+
+    /* Set exact solution; then compute right-hand-side vector.
+       By default we use an exact solution of a vector with all
+       elements of 1.0;  Alternatively, using the runtime option
+       -random_sol forms a solution vector with random components. */
+    PetscBool flg = PETSC_FALSE;
+    ierr = PetscOptionsGetBool(NULL, NULL, "-random_exact_sol", &flg, NULL); CHKERRQ(ierr);
+
+    /* random number generator context */
+    PetscRandom    rctx;
+    if (flg) {
+        ierr = PetscRandomCreate(PETSC_COMM_WORLD, &rctx); CHKERRQ(ierr);
+        ierr = PetscRandomSetFromOptions(rctx); CHKERRQ(ierr);
+        ierr = VecSetRandom(u, rctx); CHKERRQ(ierr);
+        ierr = PetscRandomDestroy(&rctx); CHKERRQ(ierr);
+    }
+    else {
+        ierr = VecSet(u, 1.); CHKERRQ(ierr);
+    }
+    ierr = MatMult(A, u, b); CHKERRQ(ierr);
+
+    /* View the exact solution vector if desired */
+    flg  = PETSC_FALSE;
+    ierr = PetscOptionsGetBool(NULL, NULL, "-view_exact_sol", &flg, NULL); CHKERRQ(ierr);
+    if (flg) {
+        ierr = VecView(u, PETSC_VIEWER_STDOUT_WORLD); CHKERRQ(ierr);
+    }
+
+    /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                  Create the linear solver and set various options
+       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+    /* Create linear solver context */
+    ierr = KSPCreate(PETSC_COMM_WORLD, &ksp); CHKERRQ(ierr);
+
+    /* Set operators. Here the matrix that defines the linear system
+       also serves as the preconditioning matrix. */
+    ierr = KSPSetOperators(ksp, A, A); CHKERRQ(ierr);
+
+    /* Set runtime options, e.g.,
+          -ksp_type <type> -pc_type <type> -ksp_monitor -ksp_rtol <rtol>
+      These options will override those specified above as long as
+      KSPSetFromOptions() is called _after_ any other customization
+      routines. */
+    ierr = KSPSetFromOptions(ksp); CHKERRQ(ierr);
+
+    /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                        Solve the linear system
+       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+    ierr = KSPSolve(ksp, b, x); CHKERRQ(ierr);
+
+    /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                        Check solution and clean up
+       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+    ierr = CheckError(x, u, ksp); CHKERRQ(ierr);
+
+    /* Free work space.  All PETSc objects should be destroyed when they
+       are no longer needed. */
+    ierr = KSPDestroy(&ksp); CHKERRQ(ierr);
+    ierr = VecDestroy(&u); CHKERRQ(ierr);
+    ierr = VecDestroy(&x); CHKERRQ(ierr);
+    ierr = VecDestroy(&b); CHKERRQ(ierr);
+    ierr = MatDestroy(&A); CHKERRQ(ierr);
+    ierr = DMDestroy(&da); CHKERRQ(ierr);
+
     return ierr;
 }

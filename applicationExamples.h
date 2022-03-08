@@ -17,6 +17,14 @@ struct AppCtx
     PetscScalar e;
 };
 
+enum BCType{DIRICHLET, NEUMANN};
+
+struct UserContext
+{
+    PetscReal rho;
+    PetscReal nu;
+    BCType    bcType;
+};
 
 class applicationExamples : public testPETSc
 {
@@ -33,6 +41,16 @@ public:
     PetscErrorCode SolPartialDiffEqu();
     PetscErrorCode SolPartialDiffEqu(int temp);
 
+    /* ------ KSP example ex_28 ------ */
+    PetscErrorCode Sol1DWaveEqu();
+
+    /* ------ KSP example ex_29 ------ */
+    PetscErrorCode SolInhomoLapl2D();
+
+    /* ------ KSP example ex_30 ------ */
+    PetscErrorCode SolInhomoLapl2DEx32();
+
+
 
 public:
     PetscInt    m_m, m_n;       /* grid dimensions*/
@@ -45,6 +63,19 @@ private:
 
     static PetscErrorCode CompStiffMatrix(KSP ksp, Mat J, Mat jac, void *ctx);
     static PetscErrorCode CompRHS(KSP ksp, Vec b, void *ctx);
+
+    /* member function for example 28 */
+    static PetscErrorCode CompRHSEx28(KSP ksp,Vec b,void *ctx);
+    static PetscErrorCode CompStiffMatrixEx28(KSP ksp, Mat J, Mat jac, void *ctx);
+    PetscErrorCode CompInitialSolution(DM da, Vec x);
+
+    /* member function for example 29 */
+    static PetscErrorCode CompRHSEx29(KSP ksp, Vec b, void *ctx);
+    static PetscErrorCode CompStiffMatrixEx29(KSP ksp, Mat J, Mat jac, void *ctx);
+
+    /* member function for example 32 */
+    static PetscErrorCode CompRHSEx32(KSP ksp,Vec b,void *ctx);
+    static PetscErrorCode CompStiffMatrixEx32(KSP ksp, Mat J,Mat jac, void *ctx);
 
 public:
     static applicationExamples *m_aEP;
