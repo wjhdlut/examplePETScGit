@@ -3,6 +3,7 @@
 #include"testPETScMat.h"
 #include"testPETScKSP.h"
 #include"applicationExamples.h"
+#include"testPETScSNES.h"
 
 static char help[] = "Solves a linear system in parallel with KSP.\n";
 
@@ -14,6 +15,7 @@ PetscErrorCode main(int argc,char **args)
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
+    /* test for the testPETScVec */
     //testPETScVec tp(rank, size);
     //tp.testVec_CreateBasicOperation();
     //tp.testVec_VecSetValues();
@@ -28,12 +30,14 @@ PetscErrorCode main(int argc,char **args)
 
     //tp.simpleKSP();
 
+    /* test for the testPETScMat */
     //testPETScMat tpM(rank, size);
     //tpM.testMat_SeqDense();
     //tpM.testMat_1DLapla();
     //tpM.testMat_ResetPreallocation();
     //tpM.testMat_PetscInfo();
 
+    /* test for the testPETScKSP */
     //testPETScKSP tpKSP(rank, size);
     //tpKSP.testKSP_SolTridiagonalLinearSysSeq();
     //tpKSP.testKSP_SolTridiagonalLinearSysPar();
@@ -49,11 +53,17 @@ PetscErrorCode main(int argc,char **args)
     //tpKSP.testKSP_SolDiffRHSKSP();
     //tpKSP.testKSP_SolPErmutedLinearSysKSP();
 
-    applicationExamples aE(rank, size);
+    /* test for the application examples */
+    //applicationExamples aE(rank, size);
     //aE.SolPoissonProblemKSP();
     //aE.SolPartialDiffEqu();
-    aE.SolPartialDiffEqu(0);
+    //aE.SolPartialDiffEqu(0);
+
+    testPETScSNES tpSNES(rank, size);
+    //tpSNES.testSNES_Sol2VarSysSeq();
+    tpSNES.testSNES_SolNewtonMethSeq();
 
     ierr = PetscFinalize();
+
     return ierr;
 }
